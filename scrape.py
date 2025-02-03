@@ -1,18 +1,17 @@
 import time
 
 from selenium import webdriver
-
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 
-from openpyxl import Workbook, styles
-from openpyxl.utils import get_column_letter
+from openpyxl import Workbook
 
 
 class Parser:
     def __init__(self) -> None:
+        self.website = "https://portal.eaeunion.org/sites/commonprocesses/ru-ru/Pages/DrugRegistrationDetails.aspx"
         self.driver = webdriver.Edge()
 
         # Count IDs
@@ -25,14 +24,14 @@ class Parser:
         self.next_bt_class = "arrow-right"
 
         # Page
-        self.start_page = 1
-        self.current_page_num = self.start_page
+        self.start_page_num = 1
+        self.current_page_num = 1
         self.__last_page_num = None
 
         # Wait time
-        self.min_wait_time = 20
+        self.min_wait_time = 50
         self.avg_wait_time = 150
-        self.max_wait_time = 500
+        self.max_wait_time = 300
 
         # Countries codes
         self.id2country = {"am": "Армения",
@@ -44,10 +43,12 @@ class Parser:
         # Xlsx
         self.xlsx_path = "Реестр ЛС ЕАЭС.xlsx"
         self.xlsx_page_title = "Реестр"
+        self.headers = ['trade_name', 'int_name', 'rel_form',
+                        'manufacturer', 'properties', 'certificate', 'update']
 
         self.all_country_spans = set()
 
-    @ property
+    @property
     def last_page_num(self) -> int:
         if self.__last_page_num is None:
             last_page_present = EC.presence_of_element_located(
@@ -75,12 +76,29 @@ class Parser:
             self.driver, self.min_wait_time).until(count_option_present)
         count_option.click()
 
-    def paginate(self) -> None:
-        self.driver.implicitly_wait(self.avg_wait_time)
-        class_bt = self.driver.find_element(By.CLASS_NAME, self.next_bt_class)
-        class_bt.click()
-        self.current_page_num += 1
+    def change_page_num(self) -> None:
+        page_num_present = EC.presence_of_element_located(
+            (By.CLASS_NAME, self.current_page_class))
+        WebDriverWait(self.driver, self.avg_wait_time).until(page_num_present)
+        page_num = self.driver.find_element(
+            By.CLASS_NAME, self.current_page_class)
+        page_num.send_keys(str(self.start_page_num))
+        page_num.send_keys(Keys.RETURN)
+
+        self.current_page_num = self.start_page_num
+
         time.sleep(self.min_wait_time)
+
+    def paginate(self) -> None:
+        if self.current_page_num < self.last_page_num:
+            self.driver.implicitly_wait(self.avg_wait_time)
+            class_bt = self.driver.find_element(
+                By.CLASS_NAME, self.next_bt_class)
+            class_bt.click()
+
+            time.sleep(self.min_wait_time)
+
+        self.current_page_num += 1
 
     def get_cell_text(self, cell):
         self.driver.implicitly_wait(0)
@@ -110,10 +128,15 @@ class Parser:
         # Simple case with no country codes
         return div.text.strip()
 
-    def get_data(self, data: dict[str, list[str]]):
+    def get_data(self) -> None:
+        # Init dict with empty lists
+        data = {k: [] for k in self.headers}
+
+        # Get table and rows
         table = self.driver.find_element(By.XPATH, "//tbody")
         rows = table.find_elements(By.TAG_NAME, "tr")
 
+        # Iterate through rows
         for row in rows:
             cells = row.find_elements(By.TAG_NAME, "td")
             values = [cell.text for cell in cells]
@@ -121,16 +144,28 @@ class Parser:
             for key, value in zip(data.keys(), values):
                 data[key].append(value)
 
-    def write_to_xlsx(self, data: dict[str, list[str]]) -> None:
+        return data
+
+    def create_xlsx(self) -> None:
         # Create a new workbook and select the active worksheet
         wb = Workbook()
         ws = wb.active
         ws.title = self.xlsx_page_title
 
         # Write headers
-        ws.append(list(data.keys()))
+        ws.append(self.headers)
 
-        # Write entries
+        # Save the workbook
+        wb.save(self.xlsx_path)
+
+        return wb
+
+    def write_to_xlsx(self,
+                      wb: Workbook,
+                      data: dict[str, list[str]]) -> None:
+        ws = wb.active
+
+        # Write new entries
         rows = zip(*data.values())
         for row in rows:
             ws.append(row)
@@ -138,37 +173,39 @@ class Parser:
         # Save the workbook
         wb.save(self.xlsx_path)
 
-    def parse(self, website: str) -> None:
+    def parse(self) -> None:
         # Set implicitly wait
         self.driver.implicitly_wait(self.avg_wait_time)
 
-        self.driver.get(website)
+        self.driver.get(self.website)
 
+        # Change number of entries per page
         self.change_num_entries()
-        self.change_page_num()
 
-        data = {"trade_name": [],
-                "int_name": [],
-                "rel_form": [],
-                "manufacturer": [],
-                "properties": [],
-                "certificate": [],
-                "update": []}
+        # Change current page num
+        if self.start_page_num != self.current_page_num:
+            self.change_page_num()
 
-        while self.current_page_num < self.last_page_num:
-            self.get_data(data)
+        # Create empty xlsx
+        wb = self.create_xlsx()
+
+        while self.current_page_num <= self.last_page_num:
+            print(f"Parsing {self.current_page_num} page...")
+            data = self.get_data()
+            self.write_to_xlsx(wb, data)
+
             self.paginate()
 
-        self.write_to_xlsx(data)
+        print("Scraping has finished.")
+
+        # TODO delete
         print(self.all_country_spans)
-        # time.sleep(self.max_wait_time)
 
 
 def main() -> None:
-    website = "https://portal.eaeunion.org/sites/commonprocesses/ru-ru/Pages/DrugRegistrationDetails.aspx"
 
     parser = Parser()
-    parser.parse(website)
+    parser.parse()
 
 
 if __name__ == "__main__":
