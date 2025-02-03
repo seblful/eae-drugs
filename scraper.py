@@ -200,13 +200,3 @@ class Parser:
 
         # TODO delete
         print(self.all_country_spans)
-
-
-def main() -> None:
-
-    parser = Parser()
-    parser.parse()
-
-
-if __name__ == "__main__":
-    main()
