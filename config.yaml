@@ -1,0 +1,27 @@
+# Start page
+start_page_num: 1
+
+# Wait Time Configuration
+min_wait_time: 50
+max_wait_time: 200
+
+# Country Codes Mapping
+id2country:
+  am: "Армения"
+  by: "Беларусь"
+  ru: "Россия"
+  kg: "Кыргызстан"
+  kz: "Казахстан"
+
+# Xlsx Configuration
+headers:
+  - trade_name
+  - int_name
+  - rel_form
+  - manufacturer
+  - properties
+  - certificate
+  - update
+
+xlsx_path: "Реестр ЛС ЕАЭС.xlsx"
+xlsx_page_title: "Реестр"
