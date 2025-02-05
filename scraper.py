@@ -126,18 +126,20 @@ class Scraper:
     def paginate(self) -> None:
         self.driver.implicitly_wait(self.max_wait_time)
 
-        self.current_page_num += 1
-
         if self.current_page_num < self.last_page_num:
-
             next_bt_present = EC.presence_of_element_located(
                 (By.CLASS_NAME, self.next_bt_class))
             next_bt = WebDriverWait(
                 self.driver, self.max_wait_time).until(next_bt_present)
             next_bt.click()
 
+            self.current_page_num += 1
+
             # Wait until new page is loaded
             self.wait_page_loading()
+
+        else:
+            self.current_page_num += 1
 
     def get_cell_text(self, cell) -> str:
         self.driver.implicitly_wait(0)
@@ -201,7 +203,6 @@ class Scraper:
         while self.current_page_num <= self.last_page_num:
             print(f"Scraping {self.current_page_num} page...")
             data = self.get_data()
-            print(len(data["trade_name"]))
             self.write_to_xlsx(data)
 
             self.paginate()
