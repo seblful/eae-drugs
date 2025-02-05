@@ -1,2 +1,7 @@
 __pycache__
 *.xlsx
+
+dist
+build
+scrape.spec
+scrape.exe
